@@ -1,92 +1,61 @@
 import streamlit as st
 import hashlib
-import itertools
+import base64
+import urllib.parse
 
-st.set_page_config(page_title="Token Analyzer", layout="wide")
+st.set_page_config(page_title="Hash Formula Analyzer", layout="wide")
+st.title("🧠 Hash Formula Analyzer")
 
-st.title("🧠 Token Pattern Analyzer (Teamobi style)")
+sample_input = st.text_input("Input string", "mypassword123")
+target_hash = st.text_input("Target MD5", "")
 
-# ===== INPUT =====
-st.subheader("Input Data")
 
-emails = st.text_area("Emails", "sieuxe10x@gmail.com\ningame296@gmail.com")
-passwords = st.text_area("Passwords", "975311\n591709")
-tokens = st.text_area("Tokens (MD5)", 
-"""60a47be3a6729b56cf505a303e5820e5
-2051ebf35acdebbd0bda79e427956b2e""")
-
-emails = [x.strip() for x in emails.split("\n") if x.strip()]
-passwords = [x.strip() for x in passwords.split("\n") if x.strip()]
-tokens = [x.strip() for x in tokens.split("\n") if x.strip()]
-
-# ===== HASH =====
 def md5(s):
     return hashlib.md5(s.encode()).hexdigest()
 
-# ===== COMMON PATTERNS =====
-def generate_patterns(email, pw):
-    patterns = []
 
-    # basic
-    patterns += [
-        email + pw,
-        pw + email,
-        email + ":" + pw,
-        pw + ":" + email,
-    ]
+def generate_patterns(x):
+    patterns = {}
 
-    # separators
-    seps = ["", "_", "-", ".", "@", "|"]
-    for s in seps:
-        patterns.append(email + s + pw)
-        patterns.append(pw + s + email)
+    patterns["plain"] = x
+    patterns["upper"] = x.upper()
+    patterns["lower"] = x.lower()
+    patterns["reverse"] = x[::-1]
 
-    # double hash
-    patterns += [
-        md5(email + pw),
-        md5(pw + email),
-    ]
+    patterns["md5(x)"] = md5(x)
+    patterns["md5(md5(x))"] = md5(md5(x))
 
-    # reverse
-    patterns += [
-        (email + pw)[::-1],
-        (pw + email)[::-1],
-    ]
+    patterns["base64(x)"] = base64.b64encode(x.encode()).decode()
+    patterns["urlencode(x)"] = urllib.parse.quote(x)
 
-    # uppercase/lowercase
-    patterns += [
-        (email + pw).upper(),
-        (email + pw).lower(),
-    ]
+    patterns["md5(base64(x))"] = md5(patterns["base64(x)"])
+    patterns["md5(urlencode(x))"] = md5(patterns["urlencode(x)"])
 
-    # trim / weird
-    patterns += [
-        email.strip() + pw.strip(),
-        email + pw + "\n",
-        email + pw + "\r\n",
-    ]
+    patterns["x + 123"] = x + "123"
+    patterns["123 + x"] = "123" + x
+    patterns["md5(x+123)"] = md5(x + "123")
+    patterns["md5(123+x)"] = md5("123" + x)
 
-    return set(patterns)
+    return patterns
 
-# ===== RUN =====
-if st.button("🚀 Analyze Pattern"):
-    found = []
 
-    for i in range(min(len(emails), len(passwords), len(tokens))):
-        email = emails[i]
-        pw = passwords[i]
-        target = tokens[i]
+if st.button("Analyze"):
+    patterns = generate_patterns(sample_input)
 
-        for p in generate_patterns(email, pw):
-            if md5(p) == target:
-                found.append((email, pw, p))
+    found = False
 
-    if found:
-        st.success("🔥 FOUND PATTERN!")
-        for f in found:
-            st.write(f"Email: {f[0]}")
-            st.write(f"Password: {f[1]}")
-            st.write(f"Match string: {f[2]}")
-            st.write("---")
-    else:
-        st.warning("❌ Không tìm thấy pattern")
+    for name, value in patterns.items():
+        result = md5(value) if name not in ["md5(x)", "md5(md5(x))", "md5(base64(x))", "md5(urlencode(x))", "md5(x+123)", "md5(123+x)"] else value
+
+        if target_hash and result == target_hash:
+            st.success(f"🔥 Match found: {name}")
+            st.code(value)
+            found = True
+
+    if not found and target_hash:
+        st.warning("No known pattern matched.")
+
+    with st.expander("Show all tested patterns"):
+        for name, value in patterns.items():
+            result = md5(value) if not name.startswith("md5") else value
+            st.write(f"{name}: {result}")
