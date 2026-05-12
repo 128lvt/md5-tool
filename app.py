@@ -1,29 +1,167 @@
-import asyncio
-import aiohttp
+import streamlit as st
+import hashlib
+import itertools
 
-url = "http://localhost:8000/login"
+# =====================================================
+# CONFIG
+# =====================================================
 
-payload = {
-    "username": "test",
-    "password": "123456"
-}
+TARGET = "d47a6297d582b52a88992a32da81c3f2"
 
-TOTAL = 1_000_000
-CONCURRENCY = 500   # test dần: 100 → 500 → 1000
+DEFAULT_PARTS = [
+    "dragon ball",
+    "teamobi",
+    "418462",
+    "1d712c355980d92ebf8816edad70bb5f",
+    "Tue, 12 May 2026 01:16:31 GMT",
+    "ingame902@gmail.com"
+]
 
-connector = aiohttp.TCPConnector(limit=CONCURRENCY)
+SEPARATORS = [
+    "",
+    " ",
+    "|",
+    ":",
+    "_",
+    "-",
+    ".",
+    ",",
+    "/"
+]
 
-async def send_request(session, i):
-    try:
-        async with session.post(url, json=payload) as resp:
-            return resp.status
-    except:
-        return 0
+# =====================================================
+# UI
+# =====================================================
 
-async def main():
-    async with aiohttp.ClientSession(connector=connector) as session:
-        tasks = [send_request(session, i) for i in range(TOTAL)]
-        results = await asyncio.gather(*tasks)
-        print("Done:", len(results))
+st.set_page_config(
+    page_title="MD5 AI Finder",
+    page_icon="🔐",
+    layout="wide"
+)
 
-asyncio.run(main())
+st.title("🔐 MD5 AI Combination Finder")
+
+st.write("Generate all possible combinations and compare MD5 hashes.")
+
+target = st.text_input(
+    "Target MD5",
+    TARGET
+)
+
+required = st.text_input(
+    "Required value",
+    "418462"
+)
+
+parts_input = st.text_area(
+    "Input data (1 line = 1 value)",
+    "\n".join(DEFAULT_PARTS),
+    height=200
+)
+
+parts = [
+    p.strip()
+    for p in parts_input.split("\n")
+    if p.strip()
+]
+
+# =====================================================
+# START BUTTON
+# =====================================================
+
+if st.button("🚀 Start Search"):
+
+    matches = []
+    checked = 0
+
+    progress = st.progress(0)
+    status = st.empty()
+
+    estimated_total = 0
+
+    for r in range(1, len(parts) + 1):
+
+        estimated_total += (
+            len(list(itertools.combinations(parts, r)))
+            * len(SEPARATORS)
+        )
+
+    current = 0
+
+    # =================================================
+    # GENERATE COMBINATIONS
+    # =================================================
+
+    for r in range(1, len(parts) + 1):
+
+        combinations = itertools.combinations(parts, r)
+
+        for combo in combinations:
+
+            # REQUIRED VALUE MUST EXIST
+            if required not in combo:
+                continue
+
+            permutations = itertools.permutations(combo)
+
+            for perm in permutations:
+
+                for sep in SEPARATORS:
+
+                    current += 1
+
+                    text = sep.join(perm)
+
+                    variants = [
+
+                        text,
+                        text.lower(),
+                        text.upper(),
+                        text.strip()
+                    ]
+
+                    for candidate in variants:
+
+                        checked += 1
+
+                        md5 = hashlib.md5(
+                            candidate.encode()
+                        ).hexdigest()
+
+                        if md5 == target:
+
+                            matches.append({
+                                "input": candidate,
+                                "md5": md5
+                            })
+
+                    progress.progress(
+                        min(current / estimated_total, 1.0)
+                    )
+
+                    status.text(
+                        f"Checked: {checked:,}"
+                    )
+
+    # =================================================
+    # RESULTS
+    # =================================================
+
+    st.success("Done!")
+
+    st.write(f"### Total Checked: {checked:,}")
+
+    if matches:
+
+        st.success(f"Found {len(matches)} match(es)!")
+
+        for m in matches:
+
+            st.code(
+                f"INPUT : {m['input']}\n"
+                f"MD5   : {m['md5']}"
+            )
+
+    else:
+
+        st.warning("No matches found.")
